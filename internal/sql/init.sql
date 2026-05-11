@@ -1,0 +1,12 @@
+DROP TABLE IF EXISTS films;
+
+CREATE TABLE films(
+    id SERIAL PRIMARY KEY,
+    nameFilm VARCHAR(255) NOT NULL,
+    duration INTEGER NOT NULL,
+    completed BOOLEAN DEFAULT FALSE,
+    created_at TIMESTAMP DEFAULT  CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+INSERT INTO films (nameFilm, duration, completed) VALUES ('Хищник', '180', 'true');
