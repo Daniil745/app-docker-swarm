@@ -10,6 +10,8 @@ import (
 	"net/http"
 	"os"
 	"time"
+
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 )
 
 func main() {
@@ -18,16 +20,15 @@ func main() {
 		serverPort = "8080"
 	}
 
-	log.Println("Сервер успешно запущен")
+	log.Println("Server is started")
 
 	db, err := database.Connect()
 	if err != nil {
 		log.Fatal(err)
 	}
 	defer db.Close()
-	log.Println("Успешное подключение к БД")
+	log.Println("Successfully connect to database")
 
-	// Redis для кэширования
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
@@ -38,10 +39,10 @@ func main() {
 		DialTimeout: 5 * time.Second,
 	})
 	if err != nil {
-		log.Fatal("Ошибка подключения к Redis:", err)
+		log.Fatal("error connection to Redis:", err)
 	}
 	defer redisClient.Close()
-	log.Println("Успешное подключение к Redis")
+	log.Println("Success connection to Redis")
 
 	filmStore := database.NewFilmStore(db.DB)
 	filmsCache := cache.NewFilmsCache(redisClient)
@@ -49,51 +50,34 @@ func main() {
 
 	mux := http.NewServeMux()
 
-	mux.HandleFunc("/films", methodHandler(handler.GetAllFilms, "GET"))
-	mux.HandleFunc("/films/create", methodHandler(handler.CreateTask, "POST"))
+	mux.Handle("GET /metrics", promhttp.Handler())
 
-	mux.HandleFunc("/films/", filmIDHandler(handler))
+	mux.HandleFunc("GET /health", func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		w.Write([]byte("OK"))
+	})
+
+	mux.HandleFunc("GET /films", handler.GetAllFilms)
+	mux.HandleFunc("POST /films/create", handler.CreateTask)
+
+	mux.HandleFunc("GET /films/{id}", handler.GetFilms)
+	mux.HandleFunc("PUT /films/{id}", handler.UpdateTask)
+	mux.HandleFunc("DELETE /films/{id}", handler.DeleteTask)
 
 	loggedMux := loggingMiddleware(mux)
 
 	serverAddr := ":" + serverPort
+	log.Printf("Server starting on %s", serverAddr)
 
 	err = http.ListenAndServe(serverAddr, loggedMux)
-
 	if err != nil {
 		log.Fatal(err)
-	}
-
-}
-
-func methodHandler(handlerFunc http.HandlerFunc, allowedMethod string) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		if r.Method != allowedMethod {
-			http.Error(w, http.StatusText(http.StatusMethodNotAllowed), http.StatusMethodNotAllowed)
-			return
-		}
-		handlerFunc(w, r)
-	}
-}
-
-func filmIDHandler(handler *handlers.HandlersTask) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		switch r.Method {
-		case http.MethodGet:
-			handler.GetFilms(w, r)
-		case http.MethodPut:
-			handler.UpdateTask(w, r)
-		case http.MethodDelete:
-			handler.DeleteTask(w, r)
-		default:
-			http.Error(w, http.StatusText(http.StatusMethodNotAllowed), http.StatusMethodNotAllowed)
-		}
 	}
 }
 
 func loggingMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		log.Printf("%s %s %s", r.Method, r.URL, r.RemoteAddr)
+		log.Printf("%s %s %s", r.Method, r.URL.Path, r.RemoteAddr)
 		next.ServeHTTP(w, r)
 	})
 }

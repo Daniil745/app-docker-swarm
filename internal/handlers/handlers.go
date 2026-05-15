@@ -41,18 +41,16 @@ func parseTaskIDFromPath(path string) (int, error) {
 func (h *HandlersTask) GetAllFilms(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
-	// 1. Пробуем взять из кэша
 	films, err := h.cache.GetList(ctx)
 	if err == nil {
 		ResponseWithJSON(w, http.StatusOK, films)
-		log.Println("Данные успешно взяты из кэша")
+		log.Println("Data has been successfully retrieved from the cache")
 		return
 	}
-	// redis.Nil = ключа нет, идём в БД; иначе — ошибка кэша, тоже идём в БД
 
 	films, err = h.store.GetAll()
 	if err != nil {
-		ResponseWithError(w, http.StatusInternalServerError, "Ошибка в получении задач")
+		ResponseWithError(w, http.StatusInternalServerError, "Error in receiving tasks")
 		return
 	}
 
@@ -66,7 +64,7 @@ func (h *HandlersTask) GetFilms(w http.ResponseWriter, r *http.Request) {
 	id, err := parseTaskIDFromPath(r.URL.Path)
 
 	if err != nil {
-		ResponseWithError(w, http.StatusInternalServerError, "Ошибка получения задачи не тот ID")
+		ResponseWithError(w, http.StatusInternalServerError, "Error receiving the wrong ID for the task")
 		return
 	}
 
@@ -84,12 +82,12 @@ func (h *HandlersTask) CreateTask(w http.ResponseWriter, r *http.Request) {
 	var input models.CreateFilmInput
 
 	if err := json.NewDecoder(r.Body).Decode(&input); err != nil {
-		ResponseWithError(w, http.StatusBadRequest, "Неккоректно отправленные данные")
+		ResponseWithError(w, http.StatusBadRequest, "Uncorrected data sent")
 		return
 	}
 
 	if strings.TrimSpace(input.NameFilm) == "" {
-		ResponseWithError(w, http.StatusBadRequest, "Заголовок тоже важен")
+		ResponseWithError(w, http.StatusBadRequest, "The title is also important")
 		return
 	}
 
@@ -99,26 +97,26 @@ func (h *HandlersTask) CreateTask(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	_ = h.cache.Invalidate(r.Context()) // инвалидируем кэш при изменении данных
+	_ = h.cache.Invalidate(r.Context())
 	ResponseWithJSON(w, http.StatusOK, task)
 }
 
 func (h *HandlersTask) UpdateTask(w http.ResponseWriter, r *http.Request) {
 	id, err := parseTaskIDFromPath(r.URL.Path)
 	if err != nil {
-		ResponseWithError(w, http.StatusInternalServerError, "Ошибка получения задачи не тот ID")
+		ResponseWithError(w, http.StatusInternalServerError, "Error receiving the wrong ID for the task")
 		return
 	}
 
 	var input models.UpdateFilmInput
 
 	if err := json.NewDecoder(r.Body).Decode(&input); err != nil {
-		ResponseWithError(w, http.StatusBadRequest, "Неверно отправленные данные")
+		ResponseWithError(w, http.StatusBadRequest, "Incorrectly sent data")
 		return
 	}
 
 	if input.NameFilm != nil && strings.TrimSpace(*input.NameFilm) == "" {
-		ResponseWithError(w, http.StatusBadRequest, "Заголовок тоже важен")
+		ResponseWithError(w, http.StatusBadRequest, "The title is also important")
 		return
 	}
 
@@ -135,7 +133,7 @@ func (h *HandlersTask) UpdateTask(w http.ResponseWriter, r *http.Request) {
 func (h *HandlersTask) DeleteTask(w http.ResponseWriter, r *http.Request) {
 	id, err := parseTaskIDFromPath(r.URL.Path)
 	if err != nil {
-		ResponseWithError(w, http.StatusBadRequest, "Не тот ID")
+		ResponseWithError(w, http.StatusBadRequest, "Wrong ID")
 		return
 	}
 
