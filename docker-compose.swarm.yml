@@ -70,8 +70,8 @@ services:
     ports:
       - "8080:8080"
     environment:
-      - DATABASE_URL=postgres://postgres:admin@postgres:5432/filmsdb?sslmode=disable
-      - REDIS_URL=redis:6379
+      - DATABASE_URL=postgres://postgres:admin@film-api_postgres:5432/filmsdb?sslmode=disable
+      - REDIS_URL=film-api_redis:6379
     networks:
       - rest-network
 
