@@ -26,7 +26,6 @@ pipeline {
                                 scp prometheus/prometheus.yml ${SWARM_MASTER}:/opt/film-api/prometheus/
                                 scp grafana/datasource.yml ${SWARM_MASTER}:/opt/film-api/grafana/
                                 scp internal/sql/init.sql ${SWARM_MASTER}:/opt/film-api/
-                                scp -r static/* ${SWARM_MASTER}:/opt/film-api/static/
 
                                 scp docker-compose.swarm.yml ${SWARM_MASTER}:/opt/film-api/
 
