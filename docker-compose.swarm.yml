@@ -7,11 +7,8 @@ networks:
 
 volumes:
   postgres_data:
-    driver: local
   redis_data:
-    driver: local
   grafana_data:
-    driver: local
 
 configs:
   nginx_config:
@@ -32,13 +29,6 @@ services:
       placement:
         constraints:
           - node.role == manager
-      resources:
-        limits:
-          memory: 512M
-        reservations:
-          memory: 256M
-      restart_policy:
-        condition: on-failure
     environment:
       POSTGRES_DB: filmsdb
       POSTGRES_USER: postgres
@@ -52,11 +42,6 @@ services:
         target: /docker-entrypoint-initdb.d/init.sql
     networks:
       - rest-network
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U postgres"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
 
   redis:
     image: redis:7-alpine
@@ -66,11 +51,6 @@ services:
       placement:
         constraints:
           - node.role == manager
-      resources:
-        limits:
-          memory: 256M
-      restart_policy:
-        condition: on-failure
     ports:
       - "6379:6379"
     volumes:
@@ -78,11 +58,6 @@ services:
     command: redis-server --appendonly yes
     networks:
       - rest-network
-    healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
 
   web:
     image: daniil9090/film-api:latest
@@ -91,18 +66,7 @@ services:
       replicas: 2
       placement:
         constraints:
-          - node.role == worker
-      resources:
-        limits:
-          memory: 512M
-        reservations:
-          memory: 256M
-      restart_policy:
-        condition: on-failure
-      update_config:
-        parallelism: 1
-        delay: 10s
-        order: start-first
+          - node.role == manager
     ports:
       - "8080:8080"
     environment:
@@ -110,11 +74,6 @@ services:
       - REDIS_URL=redis:6379
     networks:
       - rest-network
-    healthcheck:
-      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:8080/health"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
 
   nginx:
     image: nginx:alpine
@@ -124,19 +83,11 @@ services:
       placement:
         constraints:
           - node.role == manager
-      resources:
-        limits:
-          memory: 128M
-      restart_policy:
-        condition: on-failure
     ports:
       - "80:80"
-      - "443:443"
     configs:
       - source: nginx_config
         target: /etc/nginx/nginx.conf
-    volumes:
-      - ./static:/usr/share/nginx/html/static
     networks:
       - rest-network
 
@@ -148,9 +99,6 @@ services:
       placement:
         constraints:
           - node.role == manager
-      resources:
-        limits:
-          memory: 256M
     ports:
       - "9090:9090"
     configs:
@@ -167,9 +115,6 @@ services:
       placement:
         constraints:
           - node.role == manager
-      resources:
-        limits:
-          memory: 256M
     ports:
       - "3000:3000"
     volumes:
@@ -187,9 +132,6 @@ services:
     image: gcr.io/cadvisor/cadvisor:latest
     deploy:
       mode: global
-      resources:
-        limits:
-          memory: 128M
     ports:
       - "8083:8080"
     volumes:
@@ -208,9 +150,6 @@ services:
       placement:
         constraints:
           - node.role == manager
-      resources:
-        limits:
-          memory: 128M
     environment:
       DATA_SOURCE_NAME: "postgresql://postgres:admin@postgres:5432/filmsdb?sslmode=disable"
     ports:
@@ -226,12 +165,8 @@ services:
       placement:
         constraints:
           - node.role == manager
-      resources:
-        limits:
-          memory: 128M
     environment:
       REDIS_ADDR: "redis:6379"
-      REDIS_PASSWORD: ""
     ports:
       - "9121:9121"
     networks:
@@ -241,9 +176,6 @@ services:
     image: prom/node-exporter:latest
     deploy:
       mode: global
-      resources:
-        limits:
-          memory: 128M
     command:
       - '--path.procfs=/host/proc'
       - '--path.sysfs=/host/sys'
