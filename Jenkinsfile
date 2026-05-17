@@ -71,9 +71,9 @@ pipeline {
                         def BUILD_NUM = env.BUILD_NUMBER
                         sh """
                             ssh -o StrictHostKeyChecking=no ${SWARM_MASTER} '
-                                mkdir -p /opt/film-api/{nginx,prometheus,grafana,static}
+                                mkdir -p /home/daniil/film-api/{nginx,prometheus,grafana,static}
 
-                                docker stack deploy -c /opt/film-api/docker-compose.swarm.yml film-api --with-registry-auth
+                                docker stack deploy -c /home/daniil/film-api/docker-compose.swarm.yml film-api --with-registry-auth
 
                                 echo "=== Stack Services ==="
                                 docker stack services film-api
