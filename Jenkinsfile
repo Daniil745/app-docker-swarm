@@ -20,14 +20,14 @@ pipeline {
                         echo 'Uploading configuration files to Swarm Master'
                         sshagent(['swarm-master-ssh']) {
                             sh '''
-                                ssh ${SWARM_MASTER} 'mkdir -p /opt/film-api/{nginx,prometheus,grafana,static}'
+                                ssh ${SWARM_MASTER} 'mkdir -p /home/daniil/film-api/{nginx,prometheus,grafana,static}'
 
-                                scp nginx/nginx.conf ${SWARM_MASTER}:/opt/film-api/nginx/
-                                scp prometheus/prometheus.yml ${SWARM_MASTER}:/opt/film-api/prometheus/
-                                scp grafana/datasource.yml ${SWARM_MASTER}:/opt/film-api/grafana/
-                                scp internal/sql/init.sql ${SWARM_MASTER}:/opt/film-api/
+                                scp nginx/nginx.conf ${SWARM_MASTER}:/home/daniil/film-api/nginx/
+                                scp prometheus/prometheus.yml ${SWARM_MASTER}:/home/daniil/film-api/prometheus/
+                                scp grafana/datasource.yml ${SWARM_MASTER}:/home/daniil/film-api/grafana/
+                                scp internal/sql/init.sql ${SWARM_MASTER}:/home/daniil/film-api/
 
-                                scp docker-compose.swarm.yml ${SWARM_MASTER}:/opt/film-api/
+                                scp docker-compose.swarm.yml ${SWARM_MASTER}:/home/daniil/film-api/
 
                                 echo "Configs uploaded successfully"
                             '''
