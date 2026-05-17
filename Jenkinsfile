@@ -2,118 +2,111 @@ pipeline {
     agent any
 
     environment {
-        DOCKERHUB_USER = 'daniil9090'
-        APP_NAME = 'app-docker-swarm'
-        TARGET_HOST = '192.168.1.104'
-        TARGET_USER = 'daniil'
-        VERSION = "build-${BUILD_NUMBER}"
-        PREVIOUS_VERSION = ""
+        DOCKER_REGISTRY = 'daniil9090'
+        APP_NAME = 'film-api'
+        SWARM_MASTER = 'daniil@192.168.1.104'
     }
 
     stages {
         stage('Checkout') {
             steps {
-                echo 'Cloning repository...'
+                echo 'Cloning repository'
                 checkout scm
             }
         }
 
-        stage('Get Previous Version') {
-            steps {
-                echo 'Getting previous deployed version'
-                script {
-                    sh """
-                        ssh -o StrictHostKeyChecking=no ${TARGET_USER}@${TARGET_HOST} "
-                            docker inspect ${DOCKERHUB_USER}/${APP_NAME}:latest --format='{{.Config.Image}}' 2>/dev/null | cut -d: -f2 || echo 'none'
-                        " > /tmp/prev_version.txt || echo "none" > /tmp/prev_version.txt
-                    """
-                    PREVIOUS_VERSION = readFile('/tmp/prev_version.txt').trim()
-                    echo "Previous version: ${PREVIOUS_VERSION}"
+        stage('Upload Configs to Swarm Master') {
+                    steps {
+                        echo 'Uploading configuration files to Swarm Master'
+                        sshagent(['swarm-master-ssh']) {
+                            sh '''
+                                ssh ${SWARM_MASTER} 'mkdir -p /opt/film-api/{nginx,prometheus,grafana,static}'
+
+                                scp nginx/nginx.conf ${SWARM_MASTER}:/opt/film-api/nginx/
+                                scp prometheus/prometheus.yml ${SWARM_MASTER}:/opt/film-api/prometheus/
+                                scp grafana/datasource.yml ${SWARM_MASTER}:/opt/film-api/grafana/
+                                scp internal/sql/init.sql ${SWARM_MASTER}:/opt/film-api/
+                                scp -r static/* ${SWARM_MASTER}:/opt/film-api/static/
+
+                                scp docker-compose.swarm.yml ${SWARM_MASTER}:/opt/film-api/
+
+                                echo "Configs uploaded successfully"
+                            '''
+                        }
+                    }
                 }
-            }
-        }
 
         stage('Build Docker Image') {
             steps {
-                echo 'Building Docker image'
-                sh """
-                    cd app
-                    docker build -t ${DOCKERHUB_USER}/${APP_NAME}:${VERSION} .
-                    docker tag ${DOCKERHUB_USER}/${APP_NAME}:${VERSION} ${DOCKERHUB_USER}/${APP_NAME}:latest
-                """
+                echo 'Building Docker image for Go app...'
+                script {
+                    def BUILD_NUM = env.BUILD_NUMBER
+                    sh """
+                        docker build -t ${DOCKER_REGISTRY}/${APP_NAME}:build-${BUILD_NUM} .
+                        docker tag ${DOCKER_REGISTRY}/${APP_NAME}:build-${BUILD_NUM} ${DOCKER_REGISTRY}/${APP_NAME}:latest
+                    """
+                }
             }
         }
 
         stage('Push to Docker Hub') {
             steps {
                 echo 'Pushing to Docker Hub'
-                withDockerRegistry([credentialsId: 'docker-hub', url: 'https://index.docker.io/v1/' ]) {
-                    sh """
-                        docker push ${DOCKERHUB_USER}/${APP_NAME}:${VERSION}
-                        docker push ${DOCKERHUB_USER}/${APP_NAME}:latest
-                    """
+                withDockerRegistry([credentialsId: 'docker-hub-credentials', url: '']) {
+                    script {
+                        def BUILD_NUM = env.BUILD_NUMBER
+                        sh """
+                            docker push ${DOCKER_REGISTRY}/${APP_NAME}:build-${BUILD_NUM}
+                            docker push ${DOCKER_REGISTRY}/${APP_NAME}:latest
+                        """
+                    }
                 }
             }
         }
 
-        stage('Deploy to VM2') {
+        stage('Deploy to Swarm') {
             steps {
-                echo 'Deploying to prod'
-                sshagent(['vm2-sshkey']) {
-                    sh """
-                        ssh -o StrictHostKeyChecking=no ${TARGET_USER}@${TARGET_HOST} "
-                            mkdir -p /opt/fact-bot &&
-                            cat > /opt/fact-bot/docker-compose.yml << 'EOF'
-version: '3.8'
-services:
-  app-docker-swarm:
-    image: ${DOCKERHUB_USER}/${APP_NAME}:${VERSION}
-    container_name: app-docker-swarm
-    restart: unless-stopped
-    ports:
-      - '5000:5000'
-    environment:
-      - BUG_MODE=true
-EOF
-                            cd /opt/fact-bot &&
-                            docker pull ${DOCKERHUB_USER}/${APP_NAME}:${VERSION} &&
-                            docker-compose down || true &&
-                            docker-compose up -d
-                        "
-                    """
+                echo 'Deploying to Swarm cluster...'
+                sshagent(['swarm-master-ssh']) {
+                    script {
+                        def BUILD_NUM = env.BUILD_NUMBER
+                        sh """
+                            ssh -o StrictHostKeyChecking=no ${SWARM_MASTER} '
+                                mkdir -p /opt/film-api/{nginx,prometheus,grafana,static}
+
+                                docker stack deploy -c /opt/film-api/docker-compose.swarm.yml film-api --with-registry-auth
+
+                                echo "=== Stack Services ==="
+                                docker stack services film-api
+                                echo ""
+                                echo "=== Service Tasks ==="
+                                docker service ls | grep film-api
+                            '
+                        """
+                    }
                 }
             }
         }
 
-        stage('Healthcheck') {
+        stage('Verify Deployment') {
             steps {
-                echo 'Running healthcheck (or hc)'
-                script {
-                    sleep(10)
-
-                    def maxRetries = 3
-                    def healthy = false
-
-                    for (int i = 1; i <= maxRetries; i++) {
-                        echo "Healthcheck attempt ${i}/${maxRetries}"
-                        def status = sh(
-                            script: "curl -f -s -o /dev/null -w '%{http_code}' http://${TARGET_HOST}:5000/health",
-                            returnStatus: true
-                        )
-
-                        if (status == 0) {
-                            healthy = true
-                            echo "Heal PASSED"
-                            break
-                        } else {
-                            echo "Heal FAILED (attempt ${i})"
-                            if (i < maxRetries) sleep(5)
-                        }
-                    }
-
-                    if (!healthy) {
-                        error("Healthcheck failed after ${maxRetries} attempts!")
-                    }
+                echo 'Verifying deployment...'
+                sshagent(['swarm-master-ssh']) {
+                    sh """
+                        ssh ${SWARM_MASTER} '
+                            echo "Health Checks"
+                            curl -s http://localhost:8080/health || echo "API health check failed"
+                            echo ""
+                            echo "Service Status"
+                            docker service ps film-api_web --no-trunc | head -10
+                            echo ""
+                            echo "Postgres Status"
+                            docker service ps film-api_postgres --no-trunc | head -5
+                            echo ""
+                            echo "Redis Status"
+                            docker service ps film-api_redis --no-trunc | head -5
+                        '
+                    """
                 }
             }
         }
@@ -121,66 +114,15 @@ EOF
 
     post {
         success {
-            echo 'Pipeline completed successfully'
-	    script {
-	       def message = """
-	       Deploy Successfully
-	       Service: ${APP_NAME}
-               Version: ${VERSION}
-	       Time: ${new java.text.SimpleDateFormat("yyyy-MM-dd HH:mm:ss").format(new java.util.Date())}
-	       URL: http://${TARGET_HOST}:5000
-	       Healthcheck: PASSED
-	       """
-	       sendTelegramMessage(message)
-	    }
+            echo 'Deployment successful'
+            echo 'Access points:'
+            echo '  - API: http://192.168.1.104:8080'
+            echo '  - Nginx: http://192.168.1.104'
+            echo '  - Prometheus: http://192.168.1.104:9090'
+            echo '  - Grafana: http://192.168.1.104:3000 (admin/admin)'
         }
         failure {
-            echo 'Pipeline failed'
-
-            script {
-                if (PREVIOUS_VERSION != "none" && PREVIOUS_VERSION != "") {
-                    echo "Rolling back to version: ${PREVIOUS_VERSION}"
-                    sshagent(['vm2-sshkey']) {
-                        sh """
-                            ssh -o StrictHostKeyChecking=no ${TARGET_USER}@${TARGET_HOST} "
-                                cd /opt/fact-bot &&
-                                cat > /opt/fact-bot/docker-compose.yml << 'EOF'
-version: '3.8'
-services:
-  app-docker-swarm:
-    image: ${DOCKERHUB_USER}/${APP_NAME}:${PREVIOUS_VERSION}
-    container_name: app-docker-swarm
-    restart: unless-stopped
-    ports:
-      - '5000:5000'
-    environment:
-      - BUG_MODE=false
-EOF
-                                docker-compose down || true &&
-                                docker-compose up -d
-                            "
-                        """
-                    }
-                    echo "Rollback completed. Previous version restored."
-                } else {
-                    echo "No previous version found for rollback"
-                }
-            }
+            echo 'Pipeline failed! Check logs above'
         }
-    }
-}
-
-def sendTelegramMessage(String message) {
-    withCredentials([
-        string(credentialsId: 'tg-bot', variable: 'TELEGRAM_TOKEN'),
-        string(credentialsId: 'id-user-tg', variable: 'CHAT_ID')
-    ]) {
-        sh """
-            curl -s -X POST \
-                https://api.telegram.org/bot${TELEGRAM_TOKEN}/sendMessage \
-                -H 'Content-Type: application/json' \
-                -d '{"chat_id": "${CHAT_ID}", "text": "${message}"}' \
-                > /dev/null 2>&1 || echo "Telegram notification failed"
-        """
     }
 }
