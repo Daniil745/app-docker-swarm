@@ -33,7 +33,7 @@ func main() {
 	defer cancel()
 
 	redisClient, err := config.NewClient(ctx, config.Config{
-		Addr:        "film_redis:6379",
+		Addr:        "redis:6379",
 		Password:    "",
 		DB:          0,
 		DialTimeout: 5 * time.Second,
