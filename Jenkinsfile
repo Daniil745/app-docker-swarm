@@ -25,7 +25,7 @@ pipeline {
                                 scp nginx/nginx.conf ${SWARM_MASTER}:/home/daniil/film-api/nginx/
                                 scp prometheus/prometheus.yml ${SWARM_MASTER}:/home/daniil/film-api/prometheus/
                                 scp grafana/datasource.yml ${SWARM_MASTER}:/home/daniil/film-api/grafana/
-                                scp internal/sql/init.sql ${SWARM_MASTER}:/home/daniil/film-api/
+                                scp internal/sql/init.sql ${SWARM_MASTER}:/home/daniil/film-api/internal/sql/
 
                                 scp docker-compose.swarm.yml ${SWARM_MASTER}:/home/daniil/film-api/
 
