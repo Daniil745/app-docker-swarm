@@ -41,7 +41,7 @@ pipeline {
                 script {
                     def BUILD_NUM = env.BUILD_NUMBER
                     sh """
-                        docker build -t ${DOCKER_REGISTRY}/${APP_NAME}:build-${BUILD_NUM} .
+                        docker build --no-cache -t ${DOCKER_REGISTRY}/${APP_NAME}:build-${BUILD_NUM} .
                         docker tag ${DOCKER_REGISTRY}/${APP_NAME}:build-${BUILD_NUM} ${DOCKER_REGISTRY}/${APP_NAME}:latest
                     """
                 }
